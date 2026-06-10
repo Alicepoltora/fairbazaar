@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FairBazaar — fair digital goods on OPN Chain</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14; --panel:#121723; --panel2:#171e2e; --line:#232c42;
+  --text:#e8ecf4; --dim:#8a94ab; --accent:#5eead4; --accent2:#818cf8;
+  --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px/1.55 "Inter",system-ui,sans-serif;min-height:100vh}
+a{color:var(--accent)}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,14,20,.92);backdrop-filter:blur(8px);z-index:10}
+.bar{display:flex;align-items:center;gap:18px;height:62px}
+.logo{font-weight:800;font-size:19px;letter-spacing:.3px}
+.logo em{color:var(--accent);font-style:normal}
+.tabs{display:flex;gap:4px;margin-left:8px}
+.tab{padding:7px 14px;border-radius:9px;color:var(--dim);cursor:pointer;font-weight:600;border:none;background:none;font-size:14px}
+.tab.active{color:var(--text);background:var(--panel2)}
+.spacer{flex:1}
+.btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0e14;font-weight:700;border:none;border-radius:10px;padding:9px 16px;cursor:pointer;font-size:14px}
+.btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.pill{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+main{padding:28px 0 80px}
+.hero{margin:10px 0 26px}
+.hero h1{font-size:26px;font-weight:800}
+.hero p{color:var(--dim);max-width:640px;margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.card h3{font-size:16px}
+.card .desc{color:var(--dim);font-size:13.5px;flex:1;white-space:pre-wrap}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.price{font-weight:800;font-size:17px;color:var(--accent)}
+.muted{color:var(--dim);font-size:12.5px}
+.badge{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:99px}
+.b-paid{background:#1e3a8a33;color:#93c5fd}.b-delivered{background:#065f4633;color:var(--good)}
+.b-disputed{background:#78350f33;color:var(--warn)}.b-completed{background:#064e3b33;color:var(--good)}
+.b-refunded{background:#7f1d1d33;color:var(--bad)}.b-resolved{background:#4c1d9533;color:#c4b5fd}
+.rep{font-size:12px;color:var(--dim)}
+.rep b{color:var(--text)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;max-width:560px}
+.panel label{display:block;font-size:13px;color:var(--dim);font-weight:600;margin:14px 0 5px}
+.panel input,.panel textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:10px 12px;font:inherit}
+.panel textarea{min-height:90px;resize:vertical}
+.secret-box{background:#06281f;border:1px solid #0e4a39;border-radius:9px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:13px;word-break:break-all;color:var(--good)}
+.verdict{background:var(--panel2);border-left:3px solid var(--accent2);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--dim)}
+.verdict b{color:var(--text)}
+.empty{color:var(--dim);text-align:center;padding:60px 0}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 18px;max-width:380px;font-size:14px;display:none;z-index:50}
+.footer-note{margin-top:40px;color:var(--dim);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px}
+.mono{font-family:ui-monospace,monospace;font-size:12px}
+@media (max-width:640px){.tabs{display:none}}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <div class="logo">Fair<em>Bazaar</em></div>
+  <nav class="tabs">
+    <button class="tab active" data-view="market">Market</button>
+    <button class="tab" data-view="orders">My orders</button>
+    <button class="tab" data-view="sell">Sell</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="pill" id="netPill">OPN Testnet</span>
+  <button class="btn" id="connectBtn">Connect wallet</button>
+</div></header>
+
+<main class="wrap">
+  <section id="view-market">
+    <div class="hero">
+      <h1>Digital goods with on-chain fairness built in.</h1>
+      <p>Pay into escrow, get instant automated delivery, and if anything is wrong — an AI arbiter
+         rules the dispute and publishes its reasoning on OPN Chain. No trust required, only proofs.</p>
+    </div>
+    <div class="grid" id="listings"></div>
+    <div class="empty" id="marketEmpty" style="display:none">No listings yet — be the first to sell something.</div>
+  </section>
+
+  <section id="view-orders" style="display:none">
+    <div class="hero"><h1>My orders</h1><p>Secrets are decrypted locally with a key that never leaves your browser.</p></div>
+    <div class="grid" id="orders"></div>
+    <div class="empty" id="ordersEmpty" style="display:none">No orders yet.</div>
+  </section>
+
+  <section id="view-sell" style="display:none">
+    <div class="hero"><h1>Sell a digital good</h1><p>The secret is encrypted in your browser to the delivery agent — it never appears on-chain in plaintext, and sales run 24/7 without you.</p></div>
+    <div class="panel">
+      <label>Title</label><input id="sTitle" maxlength="100" placeholder="Premium API key — 12 months">
+      <label>Description — this is the promise the AI arbiter judges against</label>
+      <textarea id="sDesc" maxlength="2000" placeholder="Exactly what the buyer receives, validity, limitations…"></textarea>
+      <label>Price, OPN</label><input id="sPrice" type="number" min="0" step="0.001" placeholder="1.5">
+      <label>The goods (license key, download link, voucher code…)</label>
+      <textarea id="sSecret" maxlength="3000" placeholder="XXXX-YYYY-ZZZZ"></textarea>
+      <div style="margin-top:18px" class="row">
+        <button class="btn" id="createBtn">Create listing</button>
+        <span class="muted">Marketplace fee 2% · dispute stake 10%</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">
+    Contract <span class="mono" id="contractAddr">…</span> on OPN Chain (chainId 984) ·
+    AI arbiter <span class="mono" id="arbiterAddr">…</span> ·
+    Every delivery and every verdict is a transaction. <span id="aiMode"></span>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>

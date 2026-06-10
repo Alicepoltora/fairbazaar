@@ -9,6 +9,7 @@
     "deploy": "node scripts/deploy.js"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "ethers": "^6.16.0",
     "solc": "^0.8.24",
     "tweetnacl": "^1.0.3",
