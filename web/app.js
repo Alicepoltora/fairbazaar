@@ -65,17 +65,17 @@ async function connect() {
 const needWallet = () => { if (!contract) { toast("Connect your wallet first."); return true; } return false; };
 
 // ---------- market ----------
-async function renderMarket() {
+async function renderMarket(attempt = 0) {
   const n = Number(await withRetry(() => ro.nextListingId()));
   const grid = $("listings"); grid.innerHTML = "";
-  let shown = 0;
+  let shown = 0, skipped = 0;
   for (let i = n - 1; i >= 1; i--) {
     let l, rep, score;
     try {
       l = await withRetry(() => ro.getListing(i));
       if (!l.active) continue;
       [rep, score] = await Promise.all([withRetry(() => ro.reputation(l.seller)), withRetry(() => ro.sellerScore(l.seller))]);
-    } catch (_) { continue; }
+    } catch (_) { skipped++; continue; }
     shown++;
     const card = document.createElement("div");
     card.className = "card";
@@ -90,6 +90,8 @@ async function renderMarket() {
     grid.appendChild(card);
   }
   $("marketEmpty").style.display = shown ? "none" : "";
+  // RPC throttling can drop items on a burst — re-render until the list is complete.
+  if (skipped > 0 && attempt < 4) setTimeout(() => renderMarket(attempt + 1), 2500);
 }
 
 async function buy(listingId, price) {
