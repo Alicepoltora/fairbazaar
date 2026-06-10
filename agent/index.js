@@ -87,12 +87,13 @@ const handled = new Set(); // in-flight guard; chain state is the real source of
 async function tick() {
   const nextOrderId = Number(await contract.nextOrderId());
   for (let id = 1; id < nextOrderId; id++) {
-    if (handled.has(id)) continue;
     const o = await contract.getOrder(id);
     const status = Number(o.status);
+    const key = id + ":" + status; // an order re-enters the queue on every status change
+    if (handled.has(key)) continue;
 
     if (status === 1) { // Paid -> deliver
-      handled.add(id);
+      handled.add(key);
       try {
         const l = await contract.getListing(o.listingId);
         const goods = openAsAgent(unhex(l.encSecretForAgent));
@@ -102,10 +103,10 @@ async function tick() {
         console.log(`[delivery] order ${id} delivered, tx ${tx.hash}`);
       } catch (e) {
         console.error(`[delivery] order ${id} FAILED:`, e.message);
-        handled.delete(id); // retry next tick
+        handled.delete(key); // retry next tick
       }
     } else if (status === 3) { // Disputed -> judge
-      handled.add(id);
+      handled.add(key);
       try {
         const l = await contract.getListing(o.listingId);
         const reason = (await contract.getDispute(id)).reason || "(reason unavailable)";
@@ -117,7 +118,7 @@ async function tick() {
         console.log(`[arbiter] order ${id} resolved: verdict=${verdict}, tx ${tx.hash}`);
       } catch (e) {
         console.error(`[arbiter] order ${id} FAILED:`, e.message);
-        handled.delete(id);
+        handled.delete(key);
       }
     } else if (status === 2) { // Delivered -> finalize when window passed
       try {
