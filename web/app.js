@@ -66,15 +66,17 @@ const needWallet = () => { if (!contract) { toast("Connect your wallet first.");
 
 // ---------- market ----------
 async function renderMarket() {
-  const n = Number(await ro.nextListingId());
+  const n = Number(await withRetry(() => ro.nextListingId()));
   const grid = $("listings"); grid.innerHTML = "";
   let shown = 0;
   for (let i = n - 1; i >= 1; i--) {
-    const l = await ro.getListing(i);
-    if (!l.active) continue;
+    let l, rep, score;
+    try {
+      l = await withRetry(() => ro.getListing(i));
+      if (!l.active) continue;
+      [rep, score] = await Promise.all([withRetry(() => ro.reputation(l.seller)), withRetry(() => ro.sellerScore(l.seller))]);
+    } catch (_) { continue; }
     shown++;
-    const rep = await ro.reputation(l.seller);
-    const score = await ro.sellerScore(l.seller);
     const card = document.createElement("div");
     card.className = "card";
     card.innerHTML = `
@@ -105,14 +107,17 @@ async function buy(listingId, price) {
 // ---------- orders ----------
 async function renderOrders() {
   if (!me) { $("ordersEmpty").style.display = ""; $("ordersEmpty").textContent = "Connect your wallet to see orders."; return; }
-  const n = Number(await ro.nextOrderId());
+  const n = Number(await withRetry(() => ro.nextOrderId()));
   const grid = $("orders"); grid.innerHTML = "";
   let shown = 0;
   for (let i = n - 1; i >= 1; i--) {
-    const o = await ro.getOrder(i);
-    if (o.buyer.toLowerCase() !== me.toLowerCase()) continue;
+    let o, l;
+    try {
+      o = await withRetry(() => ro.getOrder(i));
+      if (o.buyer.toLowerCase() !== me.toLowerCase()) continue;
+      l = await withRetry(() => ro.getListing(o.listingId));
+    } catch (_) { continue; }
     shown++;
-    const l = await ro.getListing(o.listingId);
     const st = Number(o.status);
     const card = document.createElement("div");
     card.className = "card";
@@ -208,4 +213,12 @@ async function createListing() {
 }
 
 const err = (e) => (e.shortMessage || e.message || String(e)).slice(0, 140);
+
+// Public RPC endpoints drop calls now and then — retry with backoff.
+async function withRetry(fn, tries = 3) {
+  for (let i = 0; ; i++) {
+    try { return await fn(); }
+    catch (e) { if (i >= tries - 1) throw e; await new Promise((r) => setTimeout(r, 400 * (i + 1))); }
+  }
+}
 init().catch((e) => toast("Init failed: " + err(e)));
