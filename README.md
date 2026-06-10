@@ -4,6 +4,13 @@
 
 Built for IOPn Builders Growth Programme · Season 1 · DeFi & Open Finance.
 
+## Live deployment (OPN Testnet, chainId 984)
+
+- Contract: [`0xd083d72298429CadF536F29278a06f7c0dC22391`](https://testnet.iopn.tech/address/0xd083d72298429CadF536F29278a06f7c0dC22391)
+- Live demo: https://style-printers-essex-victor.trycloudflare.com (tunnel URL, may rotate — see repo issues for the current one)
+- Deployer / agent / arbiter: `0x7b4742D13De8E518B7cf7888E821f69650e3C128`
+- Already on-chain: listings, a purchase, an automated delivery, a dispute and a published verdict — browse the contract's transactions.
+
 ## The problem
 
 Buying digital goods (license keys, vouchers, access codes, files) from a stranger is a trust deadlock: the buyer won't pay first, the seller won't deliver first, and the platforms that solve this take 10–30% and own both your money and the dispute process.
