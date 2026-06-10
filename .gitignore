@@ -2,4 +2,6 @@ node_modules/
 build/
 npm.log
 .env
-scripts/_dbg*.js
+scripts/_*.js
+.env.test
+deployment.json
