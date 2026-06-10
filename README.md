@@ -48,8 +48,8 @@ Encryption: X25519 sealed boxes (`nonce | ephemeralPub | ciphertext`). The plain
 ```bash
 npm install
 npm run compile
-npx hardhat run scripts/test.js   # unit tests
-npx hardhat run scripts/e2e.js    # full crypto round-trip + dispute court
+npx hardhat run --no-compile scripts/test.js   # unit tests
+npx hardhat run --no-compile scripts/e2e.js    # full crypto round-trip + dispute court
 
 cp .env.example .env              # fill in keys
 npm run deploy                    # deploys to OPN testnet (chainId 984)

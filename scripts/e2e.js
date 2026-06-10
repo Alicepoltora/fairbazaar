@@ -40,9 +40,8 @@ async function main() {
   const encForBuyer = sealTo(unhex(o.buyerPubKey), goodsPlain);
   await (await c.connect(agentS).deliver(1, hex(encForBuyer))).wait();
 
-  // 4. buyer: read the Delivered event, decrypt locally
-  const evs = await c.queryFilter(c.filters.Delivered(1), 0, "latest");
-  const received = openWith(buyerBox.secretKey, unhex(evs[0].args.encSecretForBuyer));
+  // 4. buyer: read the delivered payload from contract state, decrypt locally
+  const received = openWith(buyerBox.secretKey, unhex(await c.getDelivered(1)));
   assert.equal(Buffer.from(received).toString(), GOODS, "buyer decrypts delivered goods");
   console.log("crypto round-trip OK — buyer received:", Buffer.from(received).toString());
 
@@ -50,9 +49,10 @@ async function main() {
   const stake = ethers.parseEther("0.1");
   await (await c.connect(buyerS).openDispute(1, "Key looks fine actually, but testing the court", { value: stake })).wait();
   await (await c.connect(arbiterS).resolveDispute(1, 2, "Goods match the description exactly; dispute unsubstantiated. Seller wins.")).wait();
-  const res = await c.queryFilter(c.filters.DisputeResolved(1), 0, "latest");
-  assert.equal(Number(res[0].args.verdict), 2);
-  console.log("on-chain verdict OK:", res[0].args.reasoning);
+  const d = await c.getDispute(1);
+  assert.equal(Number(d.verdict), 2);
+  assert.ok(d.reason.includes("testing the court"));
+  console.log("on-chain verdict OK:", d.reasoning);
 
   console.log("\nE2E PASSED");
 }

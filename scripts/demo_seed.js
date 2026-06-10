@@ -59,8 +59,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 3000));
     const o = await c.getOrder(orderId);
     if (Number(o.status) === 2) {
-      const evs = await c.queryFilter(c.filters.Delivered(orderId), 0, "latest");
-      const pt = openWith(box.secretKey, unhex(evs[evs.length - 1].args.encSecretForBuyer));
+      const pt = openWith(box.secretKey, unhex(await c.getDelivered(orderId)));
       console.log("\nAUTO-DELIVERED on OPN testnet:", Buffer.from(pt).toString());
       return;
     }

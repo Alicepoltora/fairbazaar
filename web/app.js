@@ -123,11 +123,11 @@ async function renderOrders() {
     card.querySelector("h3").textContent = l.title;
 
     if (st >= 2 && st !== 5) {
-      // fetch the delivered secret from the Delivered event and decrypt locally
+      // fetch the delivered secret straight from contract state, decrypt locally
       try {
-        const evs = await ro.queryFilter(ro.filters.Delivered(i), 0, "latest");
-        if (evs.length) {
-          const pt = openMine(unhex(evs[evs.length - 1].args.encSecretForBuyer));
+        const payload = await ro.getDelivered(i);
+        if (payload && payload !== "0x") {
+          const pt = openMine(unhex(payload));
           if (pt) {
             const box = document.createElement("div");
             box.className = "secret-box";
@@ -162,12 +162,11 @@ async function renderOrders() {
       card.appendChild(v);
     }
     if (st === 6) {
-      const evs = await ro.queryFilter(ro.filters.DisputeResolved(i), 0, "latest");
-      if (evs.length) {
-        const { verdict, reasoning } = evs[evs.length - 1].args;
+      const d = await ro.getDispute(i);
+      if (Number(d.verdict) > 0) {
         const v = document.createElement("div"); v.className = "verdict";
-        v.innerHTML = `<b>Verdict: ${VERDICT[Number(verdict)]}</b><br>`;
-        v.appendChild(document.createTextNode(reasoning));
+        v.innerHTML = `<b>Verdict: ${VERDICT[Number(d.verdict)]}</b><br>`;
+        v.appendChild(document.createTextNode(d.reasoning));
         card.appendChild(v);
       }
     }

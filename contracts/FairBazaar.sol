@@ -71,6 +71,12 @@ contract FairBazaar {
         uint128 volume; // lifetime wei earned honestly
     }
 
+    struct Dispute {
+        string reason;    // buyer's complaint, fixed at dispute time
+        Verdict verdict;
+        string reasoning; // the arbiter's published rationale
+    }
+
     // ---------------------------------------------------------------- state
 
     address public owner;
@@ -89,6 +95,10 @@ contract FairBazaar {
     mapping(uint256 => Listing) public listings;
     mapping(uint256 => Order) public orders;
     mapping(address => Reputation) public reputation; // soulbound by construction
+    // Stored in state (not just events): OPN RPC caps eth_getLogs ranges, and the
+    // buyer must be able to fetch their goods forever via a simple eth_call.
+    mapping(uint256 => bytes) public deliveredPayload; // orderId => goods sealed to buyer
+    mapping(uint256 => Dispute) public disputes;       // orderId => dispute record
 
     bool private locked;
 
@@ -195,6 +205,7 @@ contract FairBazaar {
 
         o.status = OrderStatus.Delivered;
         o.deliveredAt = uint64(block.timestamp);
+        deliveredPayload[orderId] = encSecretForBuyer;
         emit Delivered(orderId, encSecretForBuyer);
     }
 
@@ -225,6 +236,7 @@ contract FairBazaar {
 
         o.status = OrderStatus.Disputed;
         o.disputeStake = uint96(stake);
+        disputes[orderId].reason = reason;
         emit DisputeOpened(orderId, msg.sender, reason);
     }
 
@@ -239,6 +251,8 @@ contract FairBazaar {
         Listing storage l = listings[o.listingId];
         Reputation storage rep = reputation[l.seller];
         o.status = OrderStatus.Resolved;
+        disputes[orderId].verdict = verdict;
+        disputes[orderId].reasoning = reasoning;
 
         if (verdict == Verdict.BuyerWins) {
             rep.disputesLost++;
@@ -304,6 +318,8 @@ contract FairBazaar {
 
     function getListing(uint256 id) external view returns (Listing memory) { return listings[id]; }
     function getOrder(uint256 id) external view returns (Order memory) { return orders[id]; }
+    function getDispute(uint256 id) external view returns (Dispute memory) { return disputes[id]; }
+    function getDelivered(uint256 id) external view returns (bytes memory) { return deliveredPayload[id]; }
 
     // ---------------------------------------------------------------- internal
 

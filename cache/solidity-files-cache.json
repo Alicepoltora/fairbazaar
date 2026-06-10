@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/sessions/compassionate-youthful-franklin/mnt/outputs/fairbazaar/contracts/FairBazaar.sol": {
-      "lastModificationDate": 1781099748732,
-      "contentHash": "af983d0b5e91a61a858c7200c3497358",
+      "lastModificationDate": 1781123763235,
+      "contentHash": "30b7ba3bd303d469964232c85b82fab5",
       "sourceName": "contracts/FairBazaar.sol",
       "solcConfig": {
         "version": "0.8.24",

@@ -108,8 +108,7 @@ async function tick() {
       handled.add(id);
       try {
         const l = await contract.getListing(o.listingId);
-        const events = await contract.queryFilter(contract.filters.DisputeOpened(id), 0, "latest");
-        const reason = events.length ? events[events.length - 1].args.reason : "(reason unavailable)";
+        const reason = (await contract.getDispute(id)).reason || "(reason unavailable)";
         let goodsPlaintext = "(could not decrypt)";
         try { goodsPlaintext = Buffer.from(openAsAgent(unhex(l.encSecretForAgent))).toString("utf8"); } catch {}
         const { verdict, reasoning } = await judge(l, reason, goodsPlaintext);
