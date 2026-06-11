@@ -9,7 +9,8 @@ Built for IOPn Builders Growth Programme · Season 1 · DeFi & Open Finance.
 - Contract: [`0xd083d72298429CadF536F29278a06f7c0dC22391`](https://testnet.iopn.tech/address/0xd083d72298429CadF536F29278a06f7c0dC22391)
 - Live demo: https://style-printers-essex-victor.trycloudflare.com (tunnel URL, may rotate — see repo issues for the current one)
 - Deployer / agent / arbiter: `0x7b4742D13De8E518B7cf7888E821f69650e3C128`
-- Already on-chain: listings, a purchase, an automated delivery, a dispute and a published verdict — browse the contract's transactions.
+- Already on-chain: listings, purchases, automated deliveries, disputes and published AI verdicts — browse the contract's transactions.
+- Arbiter brain: Groq llama-3.3-70b (swappable to Claude or any OpenAI-compatible API via .env)
 
 ## The problem
 
@@ -23,7 +24,7 @@ Buying digital goods (license keys, vouchers, access codes, files) from a strang
 | Buy | One click. Funds lock in escrow — never sent to the seller directly | on-chain |
 | Deliver | The agent re-encrypts the goods to the **buyer's** key and publishes them in a transaction. The tx hash *is* the proof of delivery. Works 24/7, seller can be asleep | on-chain |
 | No delivery? | After `deliveryWindow` the buyer claims a refund. No permission needed | on-chain |
-| Dispute | Buyer stakes 10% and states a reason. An **AI arbiter (Claude)** judges the goods against the description fixed *before* the sale, and publishes verdict + full reasoning in a transaction — an auditable court | on-chain |
+| Dispute | Buyer stakes 10% and states a reason. An **AI arbiter (LLM)** judges the goods against the description fixed *before* the sale, and publishes verdict + full reasoning in a transaction — an auditable court | on-chain |
 | Reputation | Every sale and every lost dispute moves the seller's **soulbound score**. It cannot be bought, sold, or transferred | on-chain |
 
 ## Why OPN Chain is load-bearing (not decorative)
@@ -43,7 +44,7 @@ web/            browser app: ethers.js + tweetnacl, secrets en/decrypted locally
 contracts/      FairBazaar.sol — escrow, disputes, verdicts, reputation
 agent/          one Node process:
                   · delivery bot   (watches paid orders -> deliver() on-chain)
-                  · AI arbiter     (watches disputes -> Claude -> resolveDispute())
+                  · AI arbiter     (watches disputes -> LLM -> resolveDispute())
                   · static server  (serves web/ + /api/info)
 scripts/        compile / deploy / unit tests / crypto e2e
 ```
@@ -69,7 +70,8 @@ RPC_URL=https://testnet-rpc.iopn.tech
 DEPLOYER_PRIVATE_KEY=0x...
 AGENT_PRIVATE_KEY=0x...
 CONTRACT_ADDRESS=0x...        # after deploy
-ANTHROPIC_API_KEY=sk-ant-...  # optional; without it the arbiter runs in labelled mock mode
+GROQ_API_KEY=gsk_...          # or ANTHROPIC_API_KEY / any OpenAI-compatible LLM_API_URL+LLM_API_KEY
+                              # without any key the arbiter runs in labelled mock mode
 ```
 
 ## Trust model, honestly
