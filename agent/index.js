@@ -22,6 +22,13 @@ const CONTRACT = process.env.CONTRACT_ADDRESS;
 const PORT = Number(process.env.PORT || 8390);
 const POLL_MS = Number(process.env.POLL_MS || 4000);
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || "";
+// Any OpenAI-compatible endpoint works as the arbiter brain (Groq, OpenRouter,
+// Gemini's OpenAI mode, ...). Groq is auto-wired when GROQ_API_KEY is set.
+const LLM_URL = process.env.LLM_API_URL || (process.env.GROQ_API_KEY ? "https://api.groq.com/openai/v1/chat/completions" : "");
+const LLM_KEY = process.env.LLM_API_KEY || process.env.GROQ_API_KEY || "";
+const LLM_MODEL = process.env.LLM_MODEL || "llama-3.3-70b-versatile";
+const AI_ENABLED = !!(ANTHROPIC_KEY || (LLM_URL && LLM_KEY));
+const AI_NAME = ANTHROPIC_KEY ? "Claude (" + (process.env.ARBITER_MODEL || "claude-sonnet-4-6") + ")" : AI_ENABLED ? LLM_MODEL : "MOCK MODE";
 
 if (!CONTRACT || !process.env.AGENT_PRIVATE_KEY) {
   console.error("Set CONTRACT_ADDRESS and AGENT_PRIVATE_KEY in .env");
@@ -45,7 +52,7 @@ const openAsAgent = (payloadU8) => openWith(agentBox.secretKey, payloadU8);
 
 // ---------------------------------------------------------------- arbiter
 async function judge(listing, reason, goodsPlaintext) {
-  if (!ANTHROPIC_KEY) {
+  if (!AI_ENABLED) {
     // Mock mode for local demos without an API key. Clearly labelled on-chain.
     return { verdict: 3, reasoning: "[MOCK ARBITER] No AI key configured; defaulting to a 50/50 split pending human review." };
   }
@@ -66,14 +73,26 @@ RULES
 
 Reply with ONLY a JSON object: {"verdict": "BuyerWins"|"SellerWins"|"Split", "reasoning": "<3-5 sentences, neutral tone>"}`;
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model: process.env.ARBITER_MODEL || "claude-sonnet-4-6", max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
-  });
-  if (!res.ok) throw new Error("anthropic api " + res.status + ": " + (await res.text()).slice(0, 200));
-  const data = await res.json();
-  const text = data.content.map((b) => b.text || "").join("");
+  let text;
+  if (ANTHROPIC_KEY) {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: process.env.ARBITER_MODEL || "claude-sonnet-4-6", max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!res.ok) throw new Error("anthropic api " + res.status + ": " + (await res.text()).slice(0, 200));
+    const data = await res.json();
+    text = data.content.map((b) => b.text || "").join("");
+  } else {
+    const res = await fetch(LLM_URL, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + LLM_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ model: LLM_MODEL, max_tokens: 500, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!res.ok) throw new Error("llm api " + res.status + ": " + (await res.text()).slice(0, 200));
+    const data = await res.json();
+    text = data.choices[0].message.content;
+  }
   const m = text.match(/\{[\s\S]*\}/);
   const parsed = JSON.parse(m[0]);
   const map = { BuyerWins: 1, SellerWins: 2, Split: 3 };
@@ -148,7 +167,8 @@ const server = http.createServer((req, res) => {
       agentNaclPub: hex(agentBox.publicKey),
       agentAddress: agentWallet.address,
       arbiterAddress: arbiterWallet.address,
-      aiEnabled: !!ANTHROPIC_KEY,
+      aiEnabled: AI_ENABLED,
+      aiModel: AI_NAME,
     }));
     return;
   }
@@ -173,7 +193,7 @@ async function main() {
   console.log("  agent    :", agentWallet.address);
   console.log("  arbiter  :", arbiterWallet.address);
   console.log("  nacl pub :", hex(agentBox.publicKey));
-  console.log("  AI judge :", ANTHROPIC_KEY ? "Claude (" + (process.env.ARBITER_MODEL || "claude-sonnet-4-6") + ")" : "MOCK MODE");
+  console.log("  AI judge :", AI_NAME);
   server.listen(PORT, () => console.log("  http     : listening on :" + PORT));
   while (true) {
     try { await tick(); } catch (e) { console.error("[tick]", e.message); }

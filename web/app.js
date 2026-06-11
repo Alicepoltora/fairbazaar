@@ -30,7 +30,7 @@ async function init() {
   ABI = (await (await fetch("/abi.json")).json()).abi;
   $("contractAddr").textContent = INFO.contract;
   $("arbiterAddr").textContent = INFO.arbiterAddress;
-  $("aiMode").textContent = INFO.aiEnabled ? "Arbiter: Claude AI." : "Arbiter: mock mode (demo).";
+  $("aiMode").textContent = INFO.aiEnabled ? "Arbiter: AI (" + (INFO.aiModel||"") + ")." : "Arbiter: mock mode (demo).";
   ro = new ethers.Contract(INFO.contract, ABI, new ethers.JsonRpcProvider(INFO.rpcUrl));
   renderMarket();
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
