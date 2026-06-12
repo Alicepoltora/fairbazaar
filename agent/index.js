@@ -46,6 +46,7 @@ const contract = new ethers.Contract(CONTRACT, ART.abi, provider);
 // Agent's X25519 box keypair, deterministically derived from its eth key so a
 // restart never loses the ability to decrypt listing secrets.
 const { sealTo, openWith, hex, unhex } = require("./crypto");
+const store = require("./db");
 const seed = ethers.getBytes(ethers.keccak256(ethers.toUtf8Bytes("fairbazaar-nacl:" + process.env.AGENT_PRIVATE_KEY)));
 const agentBox = nacl.box.keyPair.fromSecretKey(seed);
 const openAsAgent = (payloadU8) => openWith(agentBox.secretKey, payloadU8);
@@ -98,6 +99,30 @@ Reply with ONLY a JSON object: {"verdict": "BuyerWins"|"SellerWins"|"Split", "re
   const map = { BuyerWins: 1, SellerWins: 2, Split: 3 };
   if (!map[parsed.verdict]) throw new Error("bad verdict: " + parsed.verdict);
   return { verdict: map[parsed.verdict], reasoning: parsed.reasoning.slice(0, 1900) };
+}
+
+// ---------------------------------------------------------------- listing cache
+// Mirrors on-chain listings + reputations into SQLite so the storefront renders
+// instantly from /api/listings instead of N chain calls through a public RPC.
+let lastFullSync = 0;
+async function syncListings() {
+  const next = Number(await contract.nextListingId());
+  const known = store.maxListingId();
+  const full = Date.now() - lastFullSync > 30000; // refresh active/sales every 30s
+  const sellers = new Set();
+  for (let id = 1; id < next; id++) {
+    if (id <= known && !full) continue;
+    const l = await contract.getListing(id);
+    store.upsertListing({ id, seller: l.seller, price: l.price.toString(), active: l.active, title: l.title, description: l.description, sales: Number(l.salesCount) });
+    sellers.add(l.seller);
+  }
+  if (full) {
+    for (const s of sellers) {
+      const [rep, score] = await Promise.all([contract.reputation(s), contract.sellerScore(s)]);
+      store.upsertRep(s, rep.sales, rep.disputesWon, rep.disputesLost, score);
+    }
+    lastFullSync = Date.now();
+  }
 }
 
 // ---------------------------------------------------------------- main loop
@@ -157,7 +182,43 @@ async function tick() {
 const WEB_DIR = path.join(__dirname, "..", "web");
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png" };
 
+const MAX_UPLOAD = 25 * 1024 * 1024; // 25 MB ciphertext cap
+
 const server = http.createServer((req, res) => {
+  // -- product file upload: body is ciphertext (encrypted in the seller's browser)
+  if (req.method === "POST" && req.url === "/api/upload") {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > MAX_UPLOAD) { res.writeHead(413); res.end("too large"); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      if (size === 0 || size > MAX_UPLOAD) return;
+      const id = require("crypto").randomBytes(12).toString("hex");
+      const name = decodeURIComponent(req.headers["x-file-name"] || "file.bin").slice(0, 200);
+      const mime = (req.headers["x-file-mime"] || "application/octet-stream").slice(0, 100);
+      store.saveFile(id, name, mime, Buffer.concat(chunks));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ fileId: id, size }));
+    });
+    return;
+  }
+  // -- encrypted product file download (buyer decrypts locally with the delivered key)
+  if (req.url.startsWith("/api/file/")) {
+    const f = store.getFile(req.url.slice("/api/file/".length).split("?")[0]);
+    if (!f) { res.writeHead(404); res.end("not found"); return; }
+    res.writeHead(200, { "content-type": "application/octet-stream", "x-file-name": encodeURIComponent(f.name), "x-file-mime": f.mime, "access-control-expose-headers": "x-file-name, x-file-mime" });
+    res.end(Buffer.from(f.data));
+    return;
+  }
+  // -- instant storefront: listings mirrored from chain into SQLite
+  if (req.url === "/api/listings") {
+    res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
+    res.end(JSON.stringify({ listings: store.listings() }));
+    return;
+  }
   if (req.url === "/api/info") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
     res.end(JSON.stringify({
@@ -197,6 +258,7 @@ async function main() {
   server.listen(PORT, () => console.log("  http     : listening on :" + PORT));
   while (true) {
     try { await tick(); } catch (e) { console.error("[tick]", e.message); }
+    try { await syncListings(); } catch (e) { console.error("[sync]", e.message); }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
 }

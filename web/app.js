@@ -35,12 +35,16 @@ async function init() {
   renderMarket();
   document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => switchView(t.dataset.view)));
   $("connectBtn").addEventListener("click", connect);
-  $("createBtn").addEventListener("click", createListing);
+  // auto-reconnect if the wallet already authorised this site
+  if (window.ethereum) {
+    const accs = await window.ethereum.request({ method: "eth_accounts" }).catch(() => []);
+    if (accs.length) connect().catch(() => {});
+  }
 }
 
 function switchView(v) {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === v));
-  for (const s of ["market", "orders", "sell"]) $("view-" + s).style.display = s === v ? "" : "none";
+  for (const s of ["market", "orders"]) $("view-" + s).style.display = s === v ? "" : "none";
   if (v === "market") renderMarket();
   if (v === "orders") renderOrders();
 }
@@ -60,12 +64,43 @@ async function connect() {
   me = await signer.getAddress();
   contract = new ethers.Contract(INFO.contract, ABI, signer);
   $("connectBtn").textContent = me.slice(0, 6) + "…" + me.slice(-4);
+  $("sellerBtn").style.display = ""; // wallet connected => selling unlocked
   toast("Wallet connected.");
 }
 const needWallet = () => { if (!contract) { toast("Connect your wallet first."); return true; } return false; };
 
 // ---------- market ----------
+function addMarketCard(grid, id, l, rep) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <div class="row"><h3></h3><span class="spacer"></span><span class="price">${ethers.formatEther(l.price)} OPN</span></div>
+    <div class="desc"></div>
+    <div class="rep">Seller <b class="mono">${l.seller.slice(0, 6)}…${l.seller.slice(-4)}</b> · score <b>${rep.score}</b> · ${rep.sales} sales · ${rep.lost} lost disputes</div>
+    <div class="row"><button class="btn small">Buy now</button><span class="muted">escrow + auto-delivery</span></div>`;
+  card.querySelector("h3").textContent = l.title;
+  card.querySelector(".desc").textContent = l.description;
+  card.querySelector("button").addEventListener("click", () => buy(id, l.price));
+  grid.appendChild(card);
+}
+
 async function renderMarket(attempt = 0) {
+  // Fast path: the agent mirrors on-chain listings into SQLite — one request, no RPC.
+  try {
+    const { listings } = await (await fetch("/api/listings")).json();
+    const active = listings.filter((l) => l.active);
+    if (active.length || attempt > 0) {
+      const grid = $("listings"); grid.innerHTML = "";
+      for (const l of active) {
+        const rep = l.rep ? { score: l.rep.score, sales: l.rep.sales, lost: l.rep.lost } : { score: 0, sales: 0, lost: 0 };
+        addMarketCard(grid, l.id, { ...l, price: BigInt(l.price) }, rep);
+      }
+      $("marketEmpty").style.display = active.length ? "none" : "";
+      return;
+    }
+  } catch (_) { /* DB warming up — fall back to chain */ }
+
+  // Fallback: enumerate listings straight from the chain.
   const n = Number(await withRetry(() => ro.nextListingId()));
   const grid = $("listings"); grid.innerHTML = "";
   let shown = 0, skipped = 0;
@@ -77,17 +112,7 @@ async function renderMarket(attempt = 0) {
       [rep, score] = await Promise.all([withRetry(() => ro.reputation(l.seller)), withRetry(() => ro.sellerScore(l.seller))]);
     } catch (_) { skipped++; continue; }
     shown++;
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `
-      <div class="row"><h3></h3><span class="spacer"></span><span class="price">${ethers.formatEther(l.price)} OPN</span></div>
-      <div class="desc"></div>
-      <div class="rep">Seller <b class="mono">${l.seller.slice(0, 6)}…${l.seller.slice(-4)}</b> · score <b>${score}</b> · ${rep.sales} sales · ${rep.disputesLost} lost disputes</div>
-      <div class="row"><button class="btn small">Buy now</button><span class="muted">escrow + auto-delivery</span></div>`;
-    card.querySelector("h3").textContent = l.title;
-    card.querySelector(".desc").textContent = l.description;
-    card.querySelector("button").addEventListener("click", () => buy(i, l.price));
-    grid.appendChild(card);
+    addMarketCard(grid, i, l, { score, sales: rep.sales, lost: rep.disputesLost });
   }
   $("marketEmpty").style.display = shown ? "none" : "";
   // RPC throttling can drop items on a burst — re-render until the list is complete.
@@ -132,14 +157,29 @@ async function renderOrders() {
     if (st >= 2 && st !== 5) {
       // fetch the delivered secret straight from contract state, decrypt locally
       try {
-        const payload = await ro.getDelivered(i);
+        const payload = await withRetry(() => ro.getDelivered(i));
         if (payload && payload !== "0x") {
           const pt = openMine(unhex(payload));
           if (pt) {
-            const box = document.createElement("div");
-            box.className = "secret-box";
-            box.textContent = new TextDecoder().decode(pt);
-            card.appendChild(box);
+            const text = new TextDecoder().decode(pt);
+            if (text.startsWith("FILE:")) {
+              // FILE:<fileId>:<keyHex>:<fileName> — fetch ciphertext, decrypt locally
+              const [, fileId, keyHex, ...nameParts] = text.split(":");
+              const fname = nameParts.join(":") || "product.bin";
+              const box = document.createElement("div");
+              box.className = "secret-box";
+              const b = document.createElement("button");
+              b.className = "btn small"; b.textContent = "⬇ Download " + fname;
+              b.addEventListener("click", () => downloadFile(fileId, keyHex, fname, b));
+              box.append("Encrypted file product. Decryption happens in your browser. ");
+              box.appendChild(b);
+              card.appendChild(box);
+            } else {
+              const box = document.createElement("div");
+              box.className = "secret-box";
+              box.textContent = text;
+              card.appendChild(box);
+            }
           }
         }
       } catch (_) {}
@@ -197,21 +237,23 @@ async function openDispute(orderId, price) {
   } catch (e) { toast(err(e)); }
 }
 
-// ---------- sell ----------
-async function createListing() {
-  if (needWallet()) return;
-  const title = $("sTitle").value.trim(), desc = $("sDesc").value.trim(), secret = $("sSecret").value.trim();
-  const price = $("sPrice").value;
-  if (!title || !desc || !secret || !price) return toast("Fill in every field.");
+// ---------- encrypted file download (key never leaves the browser) ----------
+async function downloadFile(fileId, keyHex, fname, btn) {
   try {
-    const payload = sealTo(unhex(INFO.agentNaclPub), new TextEncoder().encode(secret));
-    const tx = await contract.createListing(title, desc, ethers.parseEther(price), hex(payload));
-    toast("Creating listing…");
-    await tx.wait();
-    toast("Listed! Buyers get it auto-delivered while you sleep.");
-    $("sTitle").value = $("sDesc").value = $("sSecret").value = $("sPrice").value = "";
-    switchView("market");
-  } catch (e) { toast(err(e)); }
+    btn.disabled = true; btn.textContent = "Decrypting…";
+    const res = await fetch("/api/file/" + fileId);
+    if (!res.ok) throw new Error("file fetch failed: " + res.status);
+    const blob = new Uint8Array(await res.arrayBuffer());
+    const nonce = blob.slice(0, 24), ct = blob.slice(24);
+    const pt = nacl.secretbox.open(ct, nonce, unhex(keyHex));
+    if (!pt) throw new Error("decryption failed");
+    const url = URL.createObjectURL(new Blob([pt]));
+    const a = document.createElement("a");
+    a.href = url; a.download = fname; a.click();
+    URL.revokeObjectURL(url);
+    btn.textContent = "⬇ Download " + fname;
+  } catch (e) { toast(err(e)); btn.textContent = "⬇ Download " + fname; }
+  finally { btn.disabled = false; }
 }
 
 const err = (e) => (e.shortMessage || e.message || String(e)).slice(0, 140);

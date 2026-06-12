@@ -66,10 +66,10 @@ main{padding:28px 0 80px}
   <nav class="tabs">
     <button class="tab active" data-view="market">Market</button>
     <button class="tab" data-view="orders">My orders</button>
-    <button class="tab" data-view="sell">Sell</button>
   </nav>
   <div class="spacer"></div>
   <span class="pill" id="netPill">OPN Testnet</span>
+  <a class="btn ghost" id="sellerBtn" href="/seller.html" style="display:none">Become a seller</a>
   <button class="btn" id="connectBtn">Connect wallet</button>
 </div></header>
 
@@ -88,22 +88,6 @@ main{padding:28px 0 80px}
     <div class="hero"><h1>My orders</h1><p>Secrets are decrypted locally with a key that never leaves your browser.</p></div>
     <div class="grid" id="orders"></div>
     <div class="empty" id="ordersEmpty" style="display:none">No orders yet.</div>
-  </section>
-
-  <section id="view-sell" style="display:none">
-    <div class="hero"><h1>Sell a digital good</h1><p>The secret is encrypted in your browser to the delivery agent — it never appears on-chain in plaintext, and sales run 24/7 without you.</p></div>
-    <div class="panel">
-      <label>Title</label><input id="sTitle" maxlength="100" placeholder="Premium API key — 12 months">
-      <label>Description — this is the promise the AI arbiter judges against</label>
-      <textarea id="sDesc" maxlength="2000" placeholder="Exactly what the buyer receives, validity, limitations…"></textarea>
-      <label>Price, OPN</label><input id="sPrice" type="number" min="0" step="0.001" placeholder="1.5">
-      <label>The goods (license key, download link, voucher code…)</label>
-      <textarea id="sSecret" maxlength="3000" placeholder="XXXX-YYYY-ZZZZ"></textarea>
-      <div style="margin-top:18px" class="row">
-        <button class="btn" id="createBtn">Create listing</button>
-        <span class="muted">Marketplace fee 2% · dispute stake 10%</span>
-      </div>
-    </div>
   </section>
 
   <div class="footer-note">

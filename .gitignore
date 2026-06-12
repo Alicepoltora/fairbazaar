@@ -5,3 +5,4 @@ npm.log
 scripts/_*.js
 .env.test
 deployment.json
+fairbazaar.db*

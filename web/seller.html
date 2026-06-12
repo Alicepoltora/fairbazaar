@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seller studio — FairBazaar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14; --panel:#121723; --panel2:#171e2e; --line:#232c42;
+  --text:#e8ecf4; --dim:#8a94ab; --accent:#5eead4; --accent2:#818cf8;
+  --good:#34d399; --bad:#f87171; --warn:#fbbf24;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:15px/1.55 "Inter",system-ui,sans-serif;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+header{border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(11,14,20,.92);backdrop-filter:blur(8px);z-index:10}
+.bar{display:flex;align-items:center;gap:18px;height:62px}
+.logo{font-weight:800;font-size:19px}
+.logo em{color:var(--accent);font-style:normal}
+.spacer{flex:1}
+.btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b0e14;font-weight:700;border:none;border-radius:10px;padding:9px 16px;cursor:pointer;font-size:14px}
+.btn.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+.btn.small{padding:6px 12px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+main{padding:28px 0 80px;display:grid;grid-template-columns:1fr 1fr;gap:28px}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+.hero{grid-column:1/-1;margin:10px 0 0}
+.hero h1{font-size:26px;font-weight:800}
+.hero p{color:var(--dim);max-width:640px;margin-top:6px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.panel h2{font-size:17px;margin-bottom:6px}
+.panel label{display:block;font-size:13px;color:var(--dim);font-weight:600;margin:14px 0 5px}
+.panel input,.panel textarea{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:10px 12px;font:inherit}
+.panel textarea{min-height:90px;resize:vertical}
+.muted{color:var(--dim);font-size:12.5px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.kind{display:flex;gap:8px;margin-top:6px}
+.kind button{flex:1;padding:9px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);font-weight:700;cursor:pointer}
+.kind button.on{color:#0b0e14;background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent}
+.drop{margin-top:6px;border:2px dashed var(--line);border-radius:12px;padding:26px;text-align:center;color:var(--dim);cursor:pointer}
+.drop.has{border-color:var(--accent);color:var(--text)}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:12px}
+.card h3{font-size:15px}
+.badge{font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:99px;background:#065f4633;color:var(--good)}
+.badge.off{background:#7f1d1d33;color:var(--bad)}
+.price{font-weight:800;color:var(--accent)}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:13px 18px;max-width:380px;font-size:14px;display:none;z-index:50}
+.steps{margin-top:10px;color:var(--dim);font-size:13px}
+.steps b{color:var(--text)}
+</style>
+</head>
+<body>
+<header><div class="wrap bar">
+  <a href="/" class="logo">Fair<em>Bazaar</em></a>
+  <span class="muted">Seller studio</span>
+  <div class="spacer"></div>
+  <a class="btn ghost small" href="/">← Back to market</a>
+  <button class="btn" id="connectBtn">Connect wallet</button>
+</div></header>
+
+<main class="wrap">
+  <div class="hero">
+    <h1>Sell a digital good.</h1>
+    <p>Upload a file or paste a key. It's encrypted <b>in your browser</b> before anything leaves this page —
+       the server stores only ciphertext, the chain stores only the promise. Sales, delivery and disputes run themselves.</p>
+  </div>
+
+  <section class="panel">
+    <h2>New listing</h2>
+    <label>Title</label><input id="sTitle" maxlength="100" placeholder="Design templates pack (ZIP)">
+    <label>Description — the promise the AI arbiter judges against</label>
+    <textarea id="sDesc" maxlength="2000" placeholder="Exactly what the buyer receives, format, validity, limitations…"></textarea>
+    <label>Price, OPN</label><input id="sPrice" type="number" min="0" step="0.001" placeholder="1.5">
+    <label>Product type</label>
+    <div class="kind">
+      <button id="kindFile" class="on">📦 File</button>
+      <button id="kindText">🔑 Key / link / code</button>
+    </div>
+    <div id="fileZone">
+      <div class="drop" id="drop">Click to choose a file (up to 20 MB)<input type="file" id="file" hidden></div>
+    </div>
+    <div id="textZone" style="display:none">
+      <label>The goods</label>
+      <textarea id="sSecret" maxlength="3000" placeholder="XXXX-YYYY-ZZZZ or https://…"></textarea>
+    </div>
+    <div style="margin-top:18px" class="row">
+      <button class="btn" id="createBtn">Encrypt & list it</button>
+      <span class="muted" id="createNote">fee 2% per sale</span>
+    </div>
+    <div class="steps" id="progress"></div>
+  </section>
+
+  <section class="panel">
+    <h2>My listings</h2>
+    <div class="muted" id="mineEmpty">Connect your wallet to see your listings.</div>
+    <div id="mine"></div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+<script src="seller.js"></script>
+</body>
+</html>
